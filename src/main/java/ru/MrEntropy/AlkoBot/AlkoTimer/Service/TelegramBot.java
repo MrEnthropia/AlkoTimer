@@ -29,9 +29,6 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     final BotConfig config;
 
-    @Autowired
-    TimerManager timerManager;
-
 
     //Методы конфигурации
     @Override
@@ -92,21 +89,6 @@ public class TelegramBot extends TelegramLongPollingBot {
 
             } else {switch (messageText){
                 case "/start": prepareAndSendMessage(chatId,START_TEXT);
-                    if (!timerManager.checkTask(chatId)) {
-
-                        TimerTask timerTask = new TimerTask() {
-                            @Override
-                            public void run() {
-                                prepareAndSendMessage(chatId,"Поздравляю, вы полностью протрезвели");
-                            }
-                        };
-                        timerManager.addTask(chatId,timerTask);
-                        System.out.println("Новый пользователь добавлен");
-                        log.info("New user: "+chatId+", in "+ LocalDateTime.now());
-                        }else {
-                        System.out.println("Пользователь уже есть");
-                    }
-
                     break;
 
                 case "/hello": prepareAndSendMessage(chatId,HELLO_TEXT);
@@ -127,8 +109,10 @@ public class TelegramBot extends TelegramLongPollingBot {
                         "Вы выпили бокал вина (250 мл). Время выведения из организма: 5 ч.6 мин");
                 case WHISKY -> prepareAndSendMessage(chatId,
                         "Вы выпили стакан виски (30 мл). Время выведения из организма: 2 ч.18 мин");
-                case COCTAILE -> prepareAndSendMessage(chatId, "Какой коктейль желаете?");
-                case OTHER -> prepareAndSendMessage(chatId, "Какой другой напиток предпочитаете?");
+                case COCTAILE -> prepareAndSendMessage(chatId,
+                        "Список коктелей в разработке. Ждите обновлений");
+                case OTHER -> prepareAndSendMessage(chatId,
+                        "Список других напитков в разработке. Ждите обновлений");
             }
         }
 
