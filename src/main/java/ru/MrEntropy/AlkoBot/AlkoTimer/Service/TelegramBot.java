@@ -23,6 +23,7 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import ru.MrEntropy.AlkoBot.AlkoTimer.Config.BotConfig;
 import ru.MrEntropy.AlkoBot.AlkoTimer.Model.GenderEnum;
 
+import java.text.DecimalFormat;
 import java.util.*;
 
 @Slf4j
@@ -52,13 +53,13 @@ public class TelegramBot extends TelegramLongPollingBot {
             Сию минуту. Для регистрации в нашем баре, вам не нужно писать имя, фамилию, или указывать ваши персональные данные.
             Мы гарантируем вам полную конфиденциальность. Что бы стать нашим гостем, вам нужно указать ваш возраст, пол,
             вес, и рост. Для этого вам необходимо написать все эти параметры по следующему шаблону:
-            Незабудка;м/ж;22;333;4.44
+            Незабудка;м/ж;22;333;444
             Незабудка- наш тайный пароль для регистрации. Хотя для вас уже не тайный)
             м/ж- ваш пол(мужской или женский)
             22-ваш возраст. ВНИМАНИЕ: в наш бар допускаются только совершеннолетние посетители. Если вам меньше возраста
             совершеннолетия, мы вынуждены будем заблокировать вам доступ к нашему боту
             333-ваш вес в кг,
-            4.44-ваш рост в м, разделяется точкой,
+            444-ваш рост в см,
             Пример заполнения анкеты: Незабудка;ж;18;70;179""";
 
 
@@ -71,6 +72,8 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     //Тест ввода данных
     ArrayList <Long> guestList = new ArrayList<>();
+
+    DecimalFormat decimalFormat = new DecimalFormat("#.##");
 
     @Setter
     @Getter
@@ -88,11 +91,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     @Setter
     @Getter
-    Long weight;
-
-    @Setter
-    @Getter
-    Double height;
+    double bodyMassIndex;
 
     //Конструктор класса
     public TelegramBot(BotConfig config) {
@@ -142,8 +141,8 @@ public class TelegramBot extends TelegramLongPollingBot {
                 System.out.println(userId);
                 System.out.println(userName);
                 System.out.println(age);
-                System.out.println(height);
-                System.out.println(weight);
+                System.out.println(bodyMassIndex);
+
 
             } else {switch (messageText){
                 case "/start": prepareAndSendMessage(chatId,START_TEXT);
@@ -319,7 +318,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                 String gender = strings[1];
                 long age = Integer.parseInt(strings[2]);
                 long weight = Integer.parseInt(strings[3]);
-                double height = Double.parseDouble(strings[4]);
+                long height = Integer.parseInt(strings[4]);
                 registerUser(chatId,userName,gender,age,weight,height);
 
             }
@@ -332,18 +331,16 @@ public class TelegramBot extends TelegramLongPollingBot {
         switch (gender){
             case "м"->setGENDER(GenderEnum.MALE);
             case "ж"->setGENDER(GenderEnum.FEMALE);
-
         }
         setAge(age);
-        setWeight(weight);
-        setHeight(height);
+        setBodyMassIndex(calculationBMI(weight,height));
     }
 
+    private double calculationBMI(long weignt, double height){
+        double h = height/100;
 
-
-
-
-
+        return weignt /(Math.sqrt(h));
+    }
 
 
 }
