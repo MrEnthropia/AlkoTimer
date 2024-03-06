@@ -1,18 +1,16 @@
 package ru.MrEntropy.AlkoBot.AlkoTimer.Service;
 
 import com.vdurmont.emoji.EmojiParser;
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Chat;
-import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
+import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeChat;
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
@@ -21,7 +19,10 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import ru.MrEntropy.AlkoBot.AlkoTimer.Config.BotConfig;
+import ru.MrEntropy.AlkoBot.AlkoTimer.Config.BotInit;
 import ru.MrEntropy.AlkoBot.AlkoTimer.Model.GenderEnum;
+import ru.MrEntropy.AlkoBot.AlkoTimer.Model.User;
+import ru.MrEntropy.AlkoBot.AlkoTimer.Model.UserRepository;
 
 import java.text.DecimalFormat;
 import java.util.*;
@@ -33,6 +34,9 @@ public class TelegramBot extends TelegramLongPollingBot {
     //Переменная конфигурации
 
     final BotConfig config;
+
+    @Autowired
+    UserRepository userRepository;
 
 
     //Методы конфигурации
@@ -69,29 +73,9 @@ public class TelegramBot extends TelegramLongPollingBot {
     static final String COCKTAIL = "COCKTAIL";
     static final String OTHER = "OTHER";
 
-
-    //Тест ввода данных
-    ArrayList <Long> guestList = new ArrayList<>();
-
     DecimalFormat decimalFormat = new DecimalFormat("#.##");
 
-    @Setter
-    @Getter
-    Long userId;
-    @Setter
-    @Getter
-    String userName;
-    @Setter
-    @Getter
-    GenderEnum GENDER;
 
-    @Setter
-    @Getter
-    Long age;
-
-    @Setter
-    @Getter
-    double bodyMassIndex;
 
     //Конструктор класса
     public TelegramBot(BotConfig config) {
@@ -130,19 +114,13 @@ public class TelegramBot extends TelegramLongPollingBot {
 
 
             } else if (messageText.contains("запиши")){
-                if (!guestList.contains(chatId)) {
+                if (!userRepository.existsById(chatId)) {
                     prepareAndSendMessage(chatId, SIGN_TEXT);
                 }else {prepareAndSendMessage(chatId,
                         "Вы уже записаны. Позовите бармена, что бы он смог вам налить");}
 
-
-            } else if (messageText.contains("незабудка") && !guestList.contains(chatId)){
+            } else if (messageText.contains("незабудка")){
                 createGuest(update);
-                System.out.println(userId);
-                System.out.println(userName);
-                System.out.println(age);
-                System.out.println(bodyMassIndex);
-
 
             } else {switch (messageText){
                 case "/start": prepareAndSendMessage(chatId,START_TEXT);
@@ -202,7 +180,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         message.setChatId(chatId);
         message.setText(answer);
 
-        if (!guestList.contains(chatId)) {
+        if (!userRepository.existsById(chatId)) {
             ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
             KeyboardButton sign = new KeyboardButton("Запиши меня гостем, пожалуйста");
 
@@ -307,39 +285,66 @@ public class TelegramBot extends TelegramLongPollingBot {
         long chatId = update.getMessage().getChatId();
         Chat chat = update.getMessage().getChat();
 
-
-
-        //Тавтология??
-        if (messageText.contains("незабудка")){
-            if (!guestList.contains(chatId)){
-                guestList.add(chatId);
-                String userName = chat.getUserName();
-                String[] strings = messageText.split(";");
+                String userName = chat.getUserName();String[] strings = messageText.split(";");
                 String gender = strings[1];
                 long age = Integer.parseInt(strings[2]);
                 long weight = Integer.parseInt(strings[3]);
                 long height = Integer.parseInt(strings[4]);
-                registerUser(chatId,userName,gender,age,weight,height);
-
+            if (!userRepository.existsById(chatId) && age>=18) {
+                registerUser(chatId, userName, gender, age, weight, height);
+            }else if (userRepository.existsById(chatId) && age>=18){
+                updateUser(chatId, userName, gender, age, weight, height);
+            }else if (age<18){prepareAndSendMessage(chatId,
+                    "Извините, мы не можем записать вас нашим гостем. Ваш возраст меньше возраста совершеннолетия");
             }
-        }
-
     }
+
+    //Crud-методы
     private void registerUser(long chatId, String userName, String gender, long age, long weight, double height){
-        setUserId(chatId);
-        setUserName(userName);
+        User user = new User();
+
+        user.setChatId(chatId);
+        user.setUserName(userName);
+
         switch (gender){
-            case "м"->setGENDER(GenderEnum.MALE);
-            case "ж"->setGENDER(GenderEnum.FEMALE);
+            case "м"->user.setGender(GenderEnum.MALE);
+            case "ж"->user.setGender(GenderEnum.FEMALE);
+            //TODO:Добавить ошибку
         }
-        setAge(age);
-        setBodyMassIndex(calculationBMI(weight,height));
+        user.setAge(age);
+        double h = height/100;
+        double w = weight;
+
+        user.setBodyMassIndex(w/(Math.sqrt(h)));
+
+        userRepository.save(user);
+        log.info("New user was registered: "+user.toString());
+        prepareAndSendMessage(chatId,"Всё. Вы записаны. Допропожаловать в клуб, "+userName);
     }
 
-    private double calculationBMI(long weignt, double height){
-        double h = height/100;
+    private void updateUser(long chatId, String userName, String gender, long age, long weight, double height) {
+        User user = new User();
+        String welcome;
 
-        return weignt /(Math.sqrt(h));
+        user.setChatId(chatId);
+        user.setUserName(userName);
+
+        switch (gender) {
+            case "м" -> user.setGender(GenderEnum.MALE);
+            case "ж" -> user.setGender(GenderEnum.FEMALE);
+            //TODO:Добавить ошибку
+        }
+        user.setAge(age);
+        double h = height / 100;
+        double w = weight;
+
+        user.setBodyMassIndex(w / (Math.sqrt(h)));
+
+        userRepository.deleteById(chatId);
+        userRepository.save(user);
+        log.info("Users data was update: "+user.toString());
+        prepareAndSendMessage(chatId,"Готово. Ваша анкета была обновлена, "+userName);
+
     }
 
 
