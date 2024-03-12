@@ -24,5 +24,6 @@ public class User{
     @Enumerated(EnumType.STRING)
     GenderEnum gender;
     @NotNull
-    Double bodyMassIndex;
+    Double weight;
+
 }

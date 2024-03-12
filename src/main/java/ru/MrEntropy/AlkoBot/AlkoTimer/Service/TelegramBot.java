@@ -1,8 +1,10 @@
 package ru.MrEntropy.AlkoBot.AlkoTimer.Service;
 
 import com.vdurmont.emoji.EmojiParser;
+import jdk.jfr.Timestamp;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
@@ -10,7 +12,6 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Chat;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
-import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeChat;
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
@@ -19,13 +20,14 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import ru.MrEntropy.AlkoBot.AlkoTimer.Config.BotConfig;
-import ru.MrEntropy.AlkoBot.AlkoTimer.Config.BotInit;
 import ru.MrEntropy.AlkoBot.AlkoTimer.Model.GenderEnum;
 import ru.MrEntropy.AlkoBot.AlkoTimer.Model.User;
-import ru.MrEntropy.AlkoBot.AlkoTimer.Model.UserRepository;
+import ru.MrEntropy.AlkoBot.AlkoTimer.DAO.UserRepository;
 
+import java.sql.Time;
 import java.text.DecimalFormat;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
@@ -39,6 +41,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     UserRepository userRepository;
 
 
+
     //Методы конфигурации
     @Override
     public String getBotUsername() { return config.getBotName();}
@@ -48,8 +51,12 @@ public class TelegramBot extends TelegramLongPollingBot {
     //Текстовые константы
     final String START_TEXT =EmojiParser.parseToUnicode("Бар АлкоТайм снова открыт!!! :tada: :dancers: :tada:") ;
     final String HELLO_TEXT = EmojiParser.parseToUnicode("""
-            Приветствуем вас в баре АлкоТайм. Первый в мире телеграм-бар, где вы можете узнать,
-            сколько вам осталось до протрезвления. Это первая тестовая версия нашего бара, так что ждите обновлений""");
+            Приветствуем вас в баре АлкоТайм, чат-боте с функцией расчёта и контроля времени выведения алкоголя из
+            вашего организма.
+            Если вы у нас впервые, нажмите кнопку на клавитуре, и мы вас зарегистрируем нашим гостем. Если вы уже
+            записаны у нас, позовите бармена, и он вам нальёт.
+            Это на данный момент pre-alfa версия бота, вам пока доступен ограниченный выбор напитков
+            и расчёты выведения алкоголя в пределах отдельных порций. Ждите новых, обновлений.""");
 
     final String SORRY_TEXT= EmojiParser.parseToUnicode(
             "Извините, я вас не понял :sweat_smile:. Либо вам уже хватит, либо я просто не распознаю эту команду");
@@ -57,14 +64,13 @@ public class TelegramBot extends TelegramLongPollingBot {
             Сию минуту. Для регистрации в нашем баре, вам не нужно писать имя, фамилию, или указывать ваши персональные данные.
             Мы гарантируем вам полную конфиденциальность. Что бы стать нашим гостем, вам нужно указать ваш возраст, пол,
             вес, и рост. Для этого вам необходимо написать все эти параметры по следующему шаблону:
-            Незабудка;м/ж;22;333;444
+            Незабудка;м/ж;22;333
             Незабудка- наш тайный пароль для регистрации. Хотя для вас уже не тайный)
             м/ж- ваш пол(мужской или женский)
             22-ваш возраст. ВНИМАНИЕ: в наш бар допускаются только совершеннолетние посетители. Если вам меньше возраста
             совершеннолетия, мы вынуждены будем заблокировать вам доступ к нашему боту
             333-ваш вес в кг,
-            444-ваш рост в см,
-            Пример заполнения анкеты: Незабудка;ж;18;70;179""";
+            Пример заполнения анкеты: Незабудка;ж;18;70""";
 
 
     static final String BEER = "BEER";
@@ -138,15 +144,20 @@ public class TelegramBot extends TelegramLongPollingBot {
             long chatId = update.getCallbackQuery().getMessage().getChatId();
 
             switch (callBackData){
-                case BEER ->prepareAndSendMessage(chatId,
-                        "Вы выпили пинту пива (0,6 л). Время выведения из организма: 4 ч.24 мин");
-                case WINE -> prepareAndSendMessage(chatId,
-                        "Вы выпили бокал вина (250 мл). Время выведения из организма: 5 ч.6 мин");
-                case WHISKY -> prepareAndSendMessage(chatId,
-                        "Вы выпили стакан виски (30 мл). Время выведения из организма: 2 ч.18 мин");
-                case COCKTAIL -> prepareAndSendMessage(chatId,
+                case BEER -> alcoCalcuiator(chatId,BEER);
+//                        prepareAndSendMessage(chatId,
+//                        "Вы выпили пинту пива (0,6 л). Время выведения из организма: 4 ч.24 мин");
+                case WINE -> alcoCalcuiator(chatId, WINE);
+//                        prepareAndSendMessage(chatId,
+//                        "Вы выпили бокал вина (250 мл). Время выведения из организма: 5 ч.6 мин");
+                case WHISKY -> alcoCalcuiator(chatId, WHISKY);
+//                        prepareAndSendMessage(chatId,
+//                        "Вы выпили стакан виски (30 мл). Время выведения из организма: 2 ч.18 мин");
+                case COCKTAIL ->
+                        prepareAndSendMessage(chatId,
                         "Список коктелей в разработке. Ждите обновлений");
-                case OTHER -> prepareAndSendMessage(chatId,
+                case OTHER ->
+                        prepareAndSendMessage(chatId,
                         "Список других напитков в разработке. Ждите обновлений");
             }
         }
@@ -285,67 +296,116 @@ public class TelegramBot extends TelegramLongPollingBot {
         long chatId = update.getMessage().getChatId();
         Chat chat = update.getMessage().getChat();
 
-                String userName = chat.getUserName();String[] strings = messageText.split(";");
-                String gender = strings[1];
-                long age = Integer.parseInt(strings[2]);
-                long weight = Integer.parseInt(strings[3]);
-                long height = Integer.parseInt(strings[4]);
-            if (!userRepository.existsById(chatId) && age>=18) {
-                registerUser(chatId, userName, gender, age, weight, height);
-            }else if (userRepository.existsById(chatId) && age>=18){
-                updateUser(chatId, userName, gender, age, weight, height);
-            }else if (age<18){prepareAndSendMessage(chatId,
-                    "Извините, мы не можем записать вас нашим гостем. Ваш возраст меньше возраста совершеннолетия");
-            }
+                String userName = chat.getUserName();
+
+                String[] strings = messageText.split(";");
+                if (strings.length<4){
+                    prepareAndSendMessage(chatId, "Упс, кажется вы ввели не все ваши данные. Попробуйте ещё раз");
+                }else {
+                    String gender = strings[1];
+                    long age = Integer.parseInt(strings[2]);
+                    long weight = Integer.parseInt(strings[3]);
+                    if (age < 0 || weight < 50||age>100||weight>200){
+                        prepareAndSendMessage(chatId,"Упс, кажется вы ввели некорректные данные. Попробуйте ещё раз");
+                    } else{ if (!userRepository.existsById(chatId) && age >= 18) {
+                        registerUser(chatId, userName, gender, age, weight);
+                    } else if (userRepository.existsById(chatId) && age >= 18) {
+                        updateUser(chatId, userName, gender, age, weight);
+                    } else if (age < 18) {
+                        prepareAndSendMessage(chatId,
+                                "Извините, мы не можем записать вас нашим гостем. Ваш возраст меньше возраста совершеннолетия");
+                        }
+                    }
+
+                }
     }
 
     //Crud-методы
-    private void registerUser(long chatId, String userName, String gender, long age, long weight, double height){
+    private void registerUser(long chatId, String userName, String gender, long age, long weight){
         User user = new User();
 
         user.setChatId(chatId);
         user.setUserName(userName);
+        user.setAge(age);
+        user.setWeight((double) weight);
 
         switch (gender){
             case "м"->user.setGender(GenderEnum.MALE);
             case "ж"->user.setGender(GenderEnum.FEMALE);
             //TODO:Добавить ошибку
         }
-        user.setAge(age);
-        double h = height/100;
-        double w = weight;
-
-        user.setBodyMassIndex(w/(Math.sqrt(h)));
-
         userRepository.save(user);
         log.info("New user was registered: "+user.toString());
-        prepareAndSendMessage(chatId,"Всё. Вы записаны. Допропожаловать в клуб, "+userName);
+        prepareAndSendMessage(chatId,"Всё. Вы записаны. Добро пожаловать в клуб, "+userName);
     }
 
-    private void updateUser(long chatId, String userName, String gender, long age, long weight, double height) {
+    private void updateUser(long chatId, String userName, String gender, long age, long weight) {
         User user = new User();
-        String welcome;
+
 
         user.setChatId(chatId);
         user.setUserName(userName);
+        user.setAge(age);
+        user.setWeight((double) weight);
 
         switch (gender) {
             case "м" -> user.setGender(GenderEnum.MALE);
             case "ж" -> user.setGender(GenderEnum.FEMALE);
             //TODO:Добавить ошибку
         }
-        user.setAge(age);
-        double h = height / 100;
-        double w = weight;
-
-        user.setBodyMassIndex(w / (Math.sqrt(h)));
-
         userRepository.deleteById(chatId);
         userRepository.save(user);
         log.info("Users data was update: "+user.toString());
         prepareAndSendMessage(chatId,"Готово. Ваша анкета была обновлена, "+userName);
 
     }
+    //Метод рассчёта концентрации алкоголя в крови
+    private double widmarksFormula(User user, double a){
+        double w = user.getWeight();
+        double r = 0;
+        switch (user.getGender()){
+            case MALE -> r=0.7;
+            case FEMALE -> r=0.6;
+            default -> r=0.65;
+        }
+        return a/(w*r);
+
+    }
+    //Метод рассчёта времени выведения алкоголя из организма
+    private void alcoCalcuiator(long chatId, String drink){
+        Optional<User> userOptional = userRepository.findById(chatId);
+        User user = userOptional.get();
+        String drinkName = null;
+        double alchogol=0.0;
+
+        switch (drink){
+            case BEER -> {
+                drinkName="пинту пива (0,6 л)";
+                alchogol=37.44;
+            }
+            case WINE -> {
+                drinkName="бокал вина (250 мл)";
+                alchogol=44.865;
+            }
+            case WHISKY -> {
+                drinkName="стакан виски (300 мл)";
+                alchogol=168;
+            }
+        }
+
+        double content = widmarksFormula(user,alchogol);
+        double doubleTime = content/0.15;
+
+        int hours = (int)doubleTime ; // часы
+
+        double minute = 60*(doubleTime - hours); // минуты
+
+        int minutes = (int)minute; // минуты
+
+        prepareAndSendMessage(chatId,
+                "Вы выпили "+ drinkName +". Время выведения из организма: "+hours+" часов "+minutes+" минут.");
+    }
+
 
 
 }
