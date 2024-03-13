@@ -6,7 +6,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
-
+import org.springframework.boot.context.properties.bind.DefaultValue;
 
 
 @Data
@@ -25,5 +25,10 @@ public class User{
     GenderEnum gender;
     @NotNull
     Double weight;
+    Double contentLevel;
+
+    public void contentLevelUp(double d){
+        this.contentLevel=contentLevel+d;
+    }
 
 }

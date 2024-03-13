@@ -1,10 +1,8 @@
 package ru.MrEntropy.AlkoBot.AlkoTimer.Service;
 
 import com.vdurmont.emoji.EmojiParser;
-import jdk.jfr.Timestamp;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
@@ -24,10 +22,8 @@ import ru.MrEntropy.AlkoBot.AlkoTimer.Model.GenderEnum;
 import ru.MrEntropy.AlkoBot.AlkoTimer.Model.User;
 import ru.MrEntropy.AlkoBot.AlkoTimer.DAO.UserRepository;
 
-import java.sql.Time;
 import java.text.DecimalFormat;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
@@ -62,13 +58,13 @@ public class TelegramBot extends TelegramLongPollingBot {
             "Извините, я вас не понял :sweat_smile:. Либо вам уже хватит, либо я просто не распознаю эту команду");
     final String SIGN_TEXT = """
             Сию минуту. Для регистрации в нашем баре, вам не нужно писать имя, фамилию, или указывать ваши персональные данные.
-            Мы гарантируем вам полную конфиденциальность. Что бы стать нашим гостем, вам нужно указать ваш возраст, пол,
-            вес, и рост. Для этого вам необходимо написать все эти параметры по следующему шаблону:
+            Что бы стать нашим гостем, вам нужно указать ваш возраст, пол и вес.
+            Для этого вам необходимо написать все эти параметры по следующему шаблону:
             Незабудка;м/ж;22;333
             Незабудка- наш тайный пароль для регистрации. Хотя для вас уже не тайный)
             м/ж- ваш пол(мужской или женский)
             22-ваш возраст. ВНИМАНИЕ: в наш бар допускаются только совершеннолетние посетители. Если вам меньше возраста
-            совершеннолетия, мы вынуждены будем заблокировать вам доступ к нашему боту
+            совершеннолетия, мы вынуждены будем заблокировать вам доступ к нашему боту.
             333-ваш вес в кг,
             Пример заполнения анкеты: Незабудка;ж;18;70""";
 
@@ -114,10 +110,8 @@ public class TelegramBot extends TelegramLongPollingBot {
             if (messageText.contains("бармен")){
                 barmenAnswer(chatId,update.getMessage().getChat().getFirstName());
 
-
             } else if (messageText.contains("налей")){
                 chooseDrink(chatId);
-
 
             } else if (messageText.contains("запиши")){
                 if (!userRepository.existsById(chatId)) {
@@ -127,7 +121,10 @@ public class TelegramBot extends TelegramLongPollingBot {
 
             } else if (messageText.contains("незабудка")){
                 createGuest(update);
-
+            }else if (messageText.contains("проверь")){
+                alcoMeter(chatId);
+            } else if (messageText.contains("обнули")){
+                zeroingOut(chatId);
             } else {switch (messageText){
                 case "/start": prepareAndSendMessage(chatId,START_TEXT);
                     break;
@@ -137,22 +134,14 @@ public class TelegramBot extends TelegramLongPollingBot {
 
                 default: prepareAndSendMessage(chatId,SORRY_TEXT);
             }}
-
-
         }else if (update.hasCallbackQuery()){
             String callBackData = update.getCallbackQuery().getData();
             long chatId = update.getCallbackQuery().getMessage().getChatId();
 
             switch (callBackData){
-                case BEER -> alcoCalcuiator(chatId,BEER);
-//                        prepareAndSendMessage(chatId,
-//                        "Вы выпили пинту пива (0,6 л). Время выведения из организма: 4 ч.24 мин");
-                case WINE -> alcoCalcuiator(chatId, WINE);
-//                        prepareAndSendMessage(chatId,
-//                        "Вы выпили бокал вина (250 мл). Время выведения из организма: 5 ч.6 мин");
-                case WHISKY -> alcoCalcuiator(chatId, WHISKY);
-//                        prepareAndSendMessage(chatId,
-//                        "Вы выпили стакан виски (30 мл). Время выведения из организма: 2 ч.18 мин");
+                case BEER -> alcoCalculator(chatId,BEER);
+                case WINE -> alcoCalculator(chatId, WINE);
+                case WHISKY -> alcoCalculator(chatId, WHISKY);
                 case COCKTAIL ->
                         prepareAndSendMessage(chatId,
                         "Список коктелей в разработке. Ждите обновлений");
@@ -359,7 +348,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         prepareAndSendMessage(chatId,"Готово. Ваша анкета была обновлена, "+userName);
 
     }
-    //Метод рассчёта концентрации алкоголя в крови
+    //Метод формулы Видмарка
     private double widmarksFormula(User user, double a){
         double w = user.getWeight();
         double r = 0;
@@ -372,28 +361,31 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     }
     //Метод рассчёта времени выведения алкоголя из организма
-    private void alcoCalcuiator(long chatId, String drink){
+    private void alcoCalculator(long chatId, String drink){
         Optional<User> userOptional = userRepository.findById(chatId);
         User user = userOptional.get();
         String drinkName = null;
-        double alchogol=0.0;
+        double alcohol=0.0;
 
         switch (drink){
             case BEER -> {
                 drinkName="пинту пива (0,6 л)";
-                alchogol=37.44;
+                alcohol=37.44;
             }
             case WINE -> {
                 drinkName="бокал вина (250 мл)";
-                alchogol=44.865;
+                alcohol=44.865;
             }
             case WHISKY -> {
                 drinkName="стакан виски (300 мл)";
-                alchogol=168;
+                alcohol=168;
             }
         }
 
-        double content = widmarksFormula(user,alchogol);
+        user.contentLevelUp(widmarksFormula(user, alcohol));
+        userRepository.save(user);
+        double content = user.getContentLevel();
+
         double doubleTime = content/0.15;
 
         int hours = (int)doubleTime ; // часы
@@ -403,7 +395,54 @@ public class TelegramBot extends TelegramLongPollingBot {
         int minutes = (int)minute; // минуты
 
         prepareAndSendMessage(chatId,
-                "Вы выпили "+ drinkName +". Время выведения из организма: "+hours+" часов "+minutes+" минут.");
+                "Вы выпили "+ drinkName +". Общий уровень алкоголя в вашей крови: "
+                        +decimalFormat.format(content)+" ‰. " +intoxicationLevel(content)+
+                        "Время выведения из организма: "+hours+" часов "+minutes+" минут.");
+    }
+
+    public void alcoMeter(long chatId){
+        Optional<User> userOptional = userRepository.findById(chatId);
+        User user = userOptional.get();
+
+        double content = user.getContentLevel();
+
+        double doubleTime = content/0.15;
+
+        int hours = (int)doubleTime ; // часы
+
+        double minute = 60*(doubleTime - hours); // минуты
+
+        int minutes = (int)minute; // минуты
+        prepareAndSendMessage(chatId,
+                "Уровень алкоголя в вашем организме: "+ decimalFormat.format(content) +" ‰. "
+                        +intoxicationLevel(content) +"Время выведения из организма: "+hours+" часов "+minutes+" минут.");
+    }
+
+    public void zeroingOut(long chatId){
+        Optional<User> userOptional = userRepository.findById(chatId);
+        User user = userOptional.get();
+        user.setContentLevel(0.0);
+        userRepository.save(user);
+        prepareAndSendMessage(chatId, "Готово. Ваш уровень алкоголя составляет: "
+                +decimalFormat.format(user.getContentLevel())+" ‰.");
+    }
+
+    public String intoxicationLevel(double content){
+        String message = null;
+        if (content<0.5){
+            message="Вы почти что не пьяны, но за руль точно лучше не садиться ";
+        }else if (0.5<content && content<1.5){
+            message="Это соответвует состоянию лёгкого опьянения. Самое то, для хорошего вечера. ";
+        }else if (1.5<content && content<2.5){
+            message="Это соответвует состоянию среднего опьянения. Самое время притормозить, не то утро не будет добрым. ";
+        } else if (2.5<content && content<3.0){
+            message="Это соответвует состоянию тяжёлого опьянения. Настоятельно рекомендую вам загруляться, " +
+                    "и пойти хорошенько выспаться";
+        }else if (3.0<content){
+            message="А вот это уже тяжёлое ОПЬЯНЕНИЕ алкоголем. Если вы в состоянии это прочитать, настоятельно прошу вас " +
+                    "вернуться домой, лечь спать, и, если сможете, приготовить на утро аспирин. ";
+        }
+        return message;
     }
 
 
