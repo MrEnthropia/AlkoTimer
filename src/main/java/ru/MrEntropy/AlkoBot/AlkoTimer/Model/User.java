@@ -25,10 +25,18 @@ public class User{
     GenderEnum gender;
     @NotNull
     Double weight;
+    @NotNull
     Double contentLevel;
 
     public void contentLevelUp(double d){
         this.contentLevel=contentLevel+d;
     }
+    public void contentLevelDown(double d){
+        this.contentLevel=contentLevel-d;
+        if (this.contentLevel<0||this.contentLevel<0.001){
+            this.contentLevel=0.0;
+        }
+    }
+
 
 }

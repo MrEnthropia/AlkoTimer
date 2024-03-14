@@ -23,7 +23,9 @@ import ru.MrEntropy.AlkoBot.AlkoTimer.Model.User;
 import ru.MrEntropy.AlkoBot.AlkoTimer.DAO.UserRepository;
 
 import java.text.DecimalFormat;
+import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.*;
 
 @Slf4j
 @Component
@@ -76,6 +78,38 @@ public class TelegramBot extends TelegramLongPollingBot {
     static final String OTHER = "OTHER";
 
     DecimalFormat decimalFormat = new DecimalFormat("#.##");
+
+    Timer mainTimer = new Timer();
+
+    ScheduledExecutorService executorService = Executors
+            .newSingleThreadScheduledExecutor();
+
+
+
+    public TimerTask hourlyElimination(long chatId){
+        return new TimerTask() {
+            @Override
+            public void run() {
+                Optional<User> userOptional = userRepository.findById(chatId);
+                User user = userOptional.get();
+                user.contentLevelDown(0.15);
+                if (user.getContentLevel()==0.0){
+                    prepareAndSendMessage(chatId,"Поздравляю, вы полностью протрезвели");
+                    userRepository.save(user);
+
+                    mainTimer.cancel();
+                    mainTimer=new Timer();
+                    cancel();
+
+                }else{
+                    userRepository.save(user);
+                }
+                System.out.println("Пользователь: "+chatId+" .Уровень обновлён: "+user.getContentLevel()+" .Время: "+ LocalDateTime.now());
+            }
+        };
+    }
+
+
 
 
 
@@ -317,11 +351,12 @@ public class TelegramBot extends TelegramLongPollingBot {
         user.setUserName(userName);
         user.setAge(age);
         user.setWeight((double) weight);
+        user.setContentLevel(0.0);
 
         switch (gender){
             case "м"->user.setGender(GenderEnum.MALE);
             case "ж"->user.setGender(GenderEnum.FEMALE);
-            //TODO:Добавить ошибку
+            default -> throw new IllegalArgumentException("Gender is not defined");
         }
         userRepository.save(user);
         log.info("New user was registered: "+user.toString());
@@ -340,7 +375,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         switch (gender) {
             case "м" -> user.setGender(GenderEnum.MALE);
             case "ж" -> user.setGender(GenderEnum.FEMALE);
-            //TODO:Добавить ошибку
+            default -> throw new IllegalArgumentException("Gender is not defined");
         }
         userRepository.deleteById(chatId);
         userRepository.save(user);
@@ -381,6 +416,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                 alcohol=168;
             }
         }
+        if (user.getContentLevel()==0.0)mainTimer.schedule(hourlyElimination(chatId),30000,30000);
 
         user.contentLevelUp(widmarksFormula(user, alcohol));
         userRepository.save(user);
@@ -421,10 +457,14 @@ public class TelegramBot extends TelegramLongPollingBot {
     public void zeroingOut(long chatId){
         Optional<User> userOptional = userRepository.findById(chatId);
         User user = userOptional.get();
+        
         user.setContentLevel(0.0);
         userRepository.save(user);
         prepareAndSendMessage(chatId, "Готово. Ваш уровень алкоголя составляет: "
                 +decimalFormat.format(user.getContentLevel())+" ‰.");
+        mainTimer.cancel();
+        mainTimer=new Timer();
+
     }
 
     public String intoxicationLevel(double content){
