@@ -38,6 +38,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     @Autowired
     UserRepository userRepository;
 
+    final TimerService timerService;
 
 
     //Методы конфигурации
@@ -81,10 +82,6 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     Timer mainTimer = new Timer();
 
-    ScheduledExecutorService executorService = Executors
-            .newSingleThreadScheduledExecutor();
-
-
 
     public TimerTask hourlyElimination(long chatId){
         return new TimerTask() {
@@ -97,9 +94,11 @@ public class TelegramBot extends TelegramLongPollingBot {
                     prepareAndSendMessage(chatId,"Поздравляю, вы полностью протрезвели");
                     userRepository.save(user);
 
-                    mainTimer.cancel();
-                    mainTimer=new Timer();
-                    cancel();
+//                    mainTimer.cancel();
+//                    mainTimer=new Timer();
+                    timerService.endTimer(chatId);
+
+
 
                 }else{
                     userRepository.save(user);
@@ -114,8 +113,9 @@ public class TelegramBot extends TelegramLongPollingBot {
 
 
     //Конструктор класса
-    public TelegramBot(BotConfig config) {
+    public TelegramBot(BotConfig config, TimerService timerService) {
         this.config = config;
+        this.timerService=timerService;
         //Лист с командами
         List<BotCommand> commandList = new ArrayList<>();
 
@@ -416,7 +416,8 @@ public class TelegramBot extends TelegramLongPollingBot {
                 alcohol=168;
             }
         }
-        if (user.getContentLevel()==0.0)mainTimer.schedule(hourlyElimination(chatId),30000,30000);
+        //if (user.getContentLevel()==0.0)mainTimer.schedule(hourlyElimination(chatId),30000,30000);
+        timerService.startTimer(hourlyElimination(chatId),chatId,user.getContentLevel());
 
         user.contentLevelUp(widmarksFormula(user, alcohol));
         userRepository.save(user);
@@ -462,8 +463,10 @@ public class TelegramBot extends TelegramLongPollingBot {
         userRepository.save(user);
         prepareAndSendMessage(chatId, "Готово. Ваш уровень алкоголя составляет: "
                 +decimalFormat.format(user.getContentLevel())+" ‰.");
-        mainTimer.cancel();
-        mainTimer=new Timer();
+
+//        mainTimer.cancel();
+//        mainTimer=new Timer();
+        timerService.endTimer(chatId);
 
     }
 
@@ -479,7 +482,7 @@ public class TelegramBot extends TelegramLongPollingBot {
             message="Это соответвует состоянию тяжёлого опьянения. Настоятельно рекомендую вам загруляться, " +
                     "и пойти хорошенько выспаться";
         }else if (3.0<content){
-            message="А вот это уже тяжёлое ОПЬЯНЕНИЕ алкоголем. Если вы в состоянии это прочитать, настоятельно прошу вас " +
+            message="А вот это уже тяжёлое ОТРАВЛЕНИЕ алкоголем. Если вы в состоянии это прочитать, настоятельно прошу вас " +
                     "вернуться домой, лечь спать, и, если сможете, приготовить на утро аспирин. ";
         }
         return message;
