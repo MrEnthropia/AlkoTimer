@@ -10,13 +10,15 @@ public class ContentLevelService {
     private HashMap<Long,Double> contentCountMap = new HashMap<>();
 
     public void addContentCount(Long chatId){
-        contentCountMap.put(chatId,0.0);
+        if (!contentCountMap.containsKey(chatId))contentCountMap.put(chatId,0.0);
+        System.out.println("Новый алкометр создан: "+contentCountMap);
+
     }
 
     public void contentLevelUp(Long chatId, double d) {
-        //if (contentCountMap.containsKey(chatId)){
+        if (contentCountMap.containsKey(chatId)){
             contentCountMap.put(chatId,contentCountMap.get(chatId)+d);
-        //}
+        }
     }
     public void contentLevelDown(Long chatId, double d){
         //if (contentCountMap.containsKey(chatId)){
@@ -28,6 +30,10 @@ public class ContentLevelService {
     }
     public Double getContentLevel(Long chatId){
         return contentCountMap.get(chatId);
+    }
+    public void zeroingContentCount(Long chatId){
+        System.out.println("Алкометр пользователя "+chatId+" сброшен: "+contentCountMap);
+        contentCountMap.put(chatId,0.0);
     }
 }
 

@@ -25,7 +25,6 @@ import ru.MrEntropy.AlkoBot.AlkoTimer.DAO.UserRepository;
 import java.text.DecimalFormat;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.*;
 
 @Slf4j
 @Component
@@ -39,6 +38,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     UserRepository userRepository;
 
     final TimerService timerService;
+    final ContentLevelService contentLevelService;
 
 
     //Методы конфигурации
@@ -48,14 +48,17 @@ public class TelegramBot extends TelegramLongPollingBot {
     @Override
     public String getBotToken(){return config.getToken();}
     //Текстовые константы
-    final String START_TEXT =EmojiParser.parseToUnicode("Бар АлкоТайм снова открыт!!! :tada: :dancers: :tada:") ;
+    final String START_TEXT = EmojiParser.parseToUnicode("Бар АлкоТайм снова открыт!!! :tada: :dancers: :tada: Скажите нам привет") ;
     final String HELLO_TEXT = EmojiParser.parseToUnicode("""
             Приветствуем вас в баре АлкоТайм, чат-боте с функцией расчёта и контроля времени выведения алкоголя из
             вашего организма.
             Если вы у нас впервые, нажмите кнопку на клавитуре, и мы вас зарегистрируем нашим гостем. Если вы уже
             записаны у нас, позовите бармена, и он вам нальёт.
-            Это на данный момент pre-alfa версия бота, вам пока доступен ограниченный выбор напитков
-            и расчёты выведения алкоголя в пределах отдельных порций. Ждите новых, обновлений.""");
+            На данный момент это alfa версия бота. Вы можете полноценно опробовать функцию таймера выведения алкоголя из
+            организма, запустив его, проверить ваше состояние или же его обнулить, и получить соответвующее
+            сообщение-напоминалку, но пока что с ограниченным ассортиментом напитков. Ждите новых обновлений
+            А теперь позовите бармена, написав: Эй, бармен.""");
+
 
     final String SORRY_TEXT= EmojiParser.parseToUnicode(
             "Извините, я вас не понял :sweat_smile:. Либо вам уже хватит, либо я просто не распознаю эту команду");
@@ -70,6 +73,19 @@ public class TelegramBot extends TelegramLongPollingBot {
             совершеннолетия, мы вынуждены будем заблокировать вам доступ к нашему боту.
             333-ваш вес в кг,
             Пример заполнения анкеты: Незабудка;ж;18;70""";
+
+    final String HELP_TEXT = """
+            Работа нашего телеграмм-бота основана на формуле Видмарка- уравнении по рассчёту получаемой организмом дозы
+            алкоголя с учётом вашего пола и веса. Помимо этого, наш бот суммирует весь объём потреблённого вами алкоголя
+            и рассчитывает ориентировочное время его выведения, а так же запускает персональный почасовой таймер выведения
+            алкоголя из организма, по ококончанию которого, вам приходит уведомление о полном выведении из организма. По
+            необходимости, вы можете провериться, и посмотреть, сколько алкоголя в вас осталось и сколько времени вам ещё
+            быть нетрезвым, а так же вы можете обнулить своё состояние.
+            Что бы начать работу, зарегестрируйтесь в нашем баре, выбрав соответствующую команду, а после позовите
+            бармена.
+            ВНИМАНИЕ!!! Наш бот создан исключительно в развлекательных целях, и его показания и функции не могут быть
+            доказательствами в суде и ГИБДД по делу о нетрезвом вождении.
+            """;
 
 
     static final String BEER = "BEER";
@@ -87,23 +103,13 @@ public class TelegramBot extends TelegramLongPollingBot {
         return new TimerTask() {
             @Override
             public void run() {
-                Optional<User> userOptional = userRepository.findById(chatId);
-                User user = userOptional.get();
-                user.contentLevelDown(0.15);
-                if (user.getContentLevel()==0.0){
+                contentLevelService.contentLevelDown(chatId,0.15);
+                if (contentLevelService.getContentLevel(chatId)==0.0){
                     prepareAndSendMessage(chatId,"Поздравляю, вы полностью протрезвели");
-                    userRepository.save(user);
-
-//                    mainTimer.cancel();
-//                    mainTimer=new Timer();
                     timerService.endTimer(chatId);
-
-
-
-                }else{
-                    userRepository.save(user);
                 }
-                System.out.println("Пользователь: "+chatId+" .Уровень обновлён: "+user.getContentLevel()+" .Время: "+ LocalDateTime.now());
+                System.out.println("Пользователь: "+chatId+" .Уровень обновлён: "
+                        +contentLevelService.getContentLevel(chatId)+" .Время: "+ LocalDateTime.now());
             }
         };
     }
@@ -113,9 +119,10 @@ public class TelegramBot extends TelegramLongPollingBot {
 
 
     //Конструктор класса
-    public TelegramBot(BotConfig config, TimerService timerService) {
+    public TelegramBot(BotConfig config, TimerService timerService, ContentLevelService contentLevelService) {
         this.config = config;
         this.timerService=timerService;
+        this.contentLevelService = contentLevelService;
         //Лист с командами
         List<BotCommand> commandList = new ArrayList<>();
 
@@ -124,6 +131,9 @@ public class TelegramBot extends TelegramLongPollingBot {
         commandList.add(new BotCommand("/hello","Скажите нам привет"));
         commandList.add(new BotCommand("/help","Чего то не понимаете? Мы всё расскажем!"));
         commandList.add(new BotCommand("/settings","Желаете что то изменить или узнать?"));
+        commandList.add(new BotCommand("/sigmenup","Запишитесь к нам в клуб"));
+        commandList.add(new BotCommand("/callbarmen","Позовите бармена, что бы он вам налил"));
+
 
         //Добавление списка в бот
         try {
@@ -141,7 +151,10 @@ public class TelegramBot extends TelegramLongPollingBot {
             String messageText = update.getMessage().getText().toLowerCase(Locale.ROOT);
             long chatId = update.getMessage().getChatId();
 
-            if (messageText.contains("бармен")){
+            if (messageText.contains("привет")){
+                prepareAndSendMessage(chatId, HELLO_TEXT);
+
+            } else if (messageText.contains("бармен")){
                 barmenAnswer(chatId,update.getMessage().getChat().getFirstName());
 
             } else if (messageText.contains("налей")){
@@ -151,7 +164,9 @@ public class TelegramBot extends TelegramLongPollingBot {
                 if (!userRepository.existsById(chatId)) {
                     prepareAndSendMessage(chatId, SIGN_TEXT);
                 }else {prepareAndSendMessage(chatId,
-                        "Вы уже записаны. Позовите бармена, что бы он смог вам налить");}
+                        "Вы уже записаны. " +
+                                "Вы можете написать бармену, что бы он вам налил, или же обновить данные, введя данные по" +
+                                " шаблону: Незабудка;м/ж;22;333 ещё раз.");}
 
             } else if (messageText.contains("незабудка")){
                 createGuest(update);
@@ -164,6 +179,23 @@ public class TelegramBot extends TelegramLongPollingBot {
                     break;
 
                 case "/hello": prepareAndSendMessage(chatId,HELLO_TEXT);
+                    break;
+
+                case "/help": prepareAndSendMessage(chatId,HELP_TEXT);
+                    break;
+
+                case "/settings": prepareAndSendMessage(chatId,"Настройки в разработке");
+                    break;
+
+                case "/sigmenup":
+                    if (!userRepository.existsById(chatId)) {
+                        prepareAndSendMessage(chatId, SIGN_TEXT);
+                    }else {prepareAndSendMessage(chatId,
+                            "Вы уже записаны. " +
+                                    "Вы можете написать бармену, что бы он вам налил, или же обновить данные.");}
+                    break;
+
+                case "/callbarmen": barmenAnswer(chatId,update.getMessage().getChat().getFirstName());;
                     break;
 
                 default: prepareAndSendMessage(chatId,SORRY_TEXT);
@@ -360,7 +392,9 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
         userRepository.save(user);
         log.info("New user was registered: "+user.toString());
-        prepareAndSendMessage(chatId,"Всё. Вы записаны. Добро пожаловать в клуб, "+userName);
+        prepareAndSendMessage(chatId,"Всё. Вы записаны. Добро пожаловать в клуб, "+userName+". Кстати, " +
+                "если вам вдруг надо будет обновить ваши данные, вы можете снова их ввести по такому же принципу, и ваша" +
+                "анкета автоматически обновится");
     }
 
     private void updateUser(long chatId, String userName, String gender, long age, long weight) {
@@ -416,12 +450,13 @@ public class TelegramBot extends TelegramLongPollingBot {
                 alcohol=168;
             }
         }
-        //if (user.getContentLevel()==0.0)mainTimer.schedule(hourlyElimination(chatId),30000,30000);
-        timerService.startTimer(hourlyElimination(chatId),chatId,user.getContentLevel());
 
-        user.contentLevelUp(widmarksFormula(user, alcohol));
-        userRepository.save(user);
-        double content = user.getContentLevel();
+        contentLevelService.addContentCount(chatId);
+        timerService.startTimer(hourlyElimination(chatId),chatId,contentLevelService.getContentLevel(chatId));
+
+        contentLevelService.contentLevelUp(chatId,widmarksFormula(user, alcohol));
+
+        double content = contentLevelService.getContentLevel(chatId);
 
         double doubleTime = content/0.15;
 
@@ -438,10 +473,9 @@ public class TelegramBot extends TelegramLongPollingBot {
     }
 
     public void alcoMeter(long chatId){
-        Optional<User> userOptional = userRepository.findById(chatId);
-        User user = userOptional.get();
 
-        double content = user.getContentLevel();
+        contentLevelService.addContentCount(chatId);
+        double content = contentLevelService.getContentLevel(chatId);
 
         double doubleTime = content/0.15;
 
@@ -456,37 +490,35 @@ public class TelegramBot extends TelegramLongPollingBot {
     }
 
     public void zeroingOut(long chatId){
-        Optional<User> userOptional = userRepository.findById(chatId);
-        User user = userOptional.get();
-        
-        user.setContentLevel(0.0);
-        userRepository.save(user);
+
+        contentLevelService.addContentCount(chatId);
+        contentLevelService.zeroingContentCount(chatId);
+
         prepareAndSendMessage(chatId, "Готово. Ваш уровень алкоголя составляет: "
-                +decimalFormat.format(user.getContentLevel())+" ‰.");
+                +decimalFormat.format(contentLevelService.getContentLevel(chatId))+" ‰.");
 
-//        mainTimer.cancel();
-//        mainTimer=new Timer();
         timerService.endTimer(chatId);
-
-
     }
 
     public String intoxicationLevel(double content){
         String message = null;
-        if (content<0.5){
-            message="Вы почти что не пьяны, но за руль точно лучше не садиться ";
+        if (content==0.0){
+            message="Вы трезвы как стёклышко)). ";
+        }else if (content<0.5){
+            message="Вы почти что не пьяны, но за руль точно лучше не садиться. ";
         }else if (0.5<content && content<1.5){
             message="Это соответвует состоянию лёгкого опьянения. Самое то, для хорошего вечера. ";
         }else if (1.5<content && content<2.5){
             message="Это соответвует состоянию среднего опьянения. Самое время притормозить, не то утро не будет добрым. ";
         } else if (2.5<content && content<3.0){
-            message="Это соответвует состоянию тяжёлого опьянения. Настоятельно рекомендую вам загруляться, " +
-                    "и пойти хорошенько выспаться";
-        }else if (3.0<content){
+            message="Это соответвует состоянию тяжёлого опьянения. Настоятельно рекомендую вам закгруляться, " +
+                    "и пойти хорошенько выспаться,а на утро приготовить что нибудь от похмелья. ";
+        }else if (3.0<=content){
             message="А вот это уже тяжёлое ОТРАВЛЕНИЕ алкоголем. Если вы в состоянии это прочитать, настоятельно прошу вас " +
                     "вернуться домой, лечь спать, и, если сможете, приготовить на утро аспирин. ";
         }
         return message;
+
     }
 
 
